@@ -1,0 +1,31 @@
+Hi currently this applcation has new_users table and m_loan table new_users tables contains information about users ad m_loan contains info about
+ loan taken by user.
+ In m_loan loan_status 300 means loan is active, 600 means loan is closed and 131 means loan is closed
+
+
+DDL for the tables is
+CREATE TABLE `new_users` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) DEFAULT NULL,
+  `mobile` varchar(100) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `address` varchar(100) DEFAULT NULL,
+  `created_at` date,
+  PRIMARY KEY (`id`)
+)
+
+CREATE TABLE `m_loan` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `loan_amount` double NOT NULL,
+  `roi` double NOT NULL,
+  `emi` bigint NOT NULL,
+  `total_outstanding` double NOT NULL,
+  `interest_outstanding` double NOT NULL,
+  `principal_outstanding` double NOT NULL,
+  `loan_status` bigint NOT NULL,
+  `created_at` date DEFAULT NULL,
+  `opened_date` date DEFAULT NULL,
+  `closed_date` date DEFAULT NULL,
+  PRIMARY KEY (`id`)
+)
