@@ -1,9 +1,13 @@
 Hi currently this applcation has new_users table and m_loan table new_users tables contains information about users ad m_loan contains info about
  loan taken by user.
- In m_loan loan_status 300 means loan is active, 600 means loan is closed and 131 means loan is closed
+ In m_loan, loan_status 300 means loan is active, 600 means loan is closed and 131 means loan is closed.
+ In m_loan_transaction, all the transaction foe a loan is stored here along with apportionment, trans_type=1 means disbursement and
+ trans type=2 means repayment.
+ In m_loan_repayment_schedule all the emis for a loan is stored here, if obligation met on date is not null thr this emi is closed
 
 
-DDL for the tables is
+DDL for the tables is, go through DDLs for columns of a table, column name itself tells its definition.
+
 CREATE TABLE `new_users` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `name` varchar(100) DEFAULT NULL,
@@ -27,5 +31,30 @@ CREATE TABLE `m_loan` (
   `created_at` date DEFAULT NULL,
   `opened_date` date DEFAULT NULL,
   `closed_date` date DEFAULT NULL,
+  PRIMARY KEY (`id`)
+)
+
+CREATE TABLE `m_loan_transaction` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `loan_id` bigint NOT NULL,
+  `trans_id` varchar(50) NOT NULL,
+  `trans_type` int NOT NULL,
+  `amount` double NOT NULL,
+  `principal_paid` double NOT NULL,
+  `interest_paid` double NOT NULL,
+  `created_at` date DEFAULT NULL,
+  PRIMARY KEY (`id`)
+)
+
+CREATE TABLE `m_loan_repayment_schedule` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `loan_id` bigint NOT NULL,
+  `due_date` date NOT NULL,
+  `installment` int NOT NULL,
+  `principal` double NOT NULL,
+  `interest` double NOT NULL,
+  `emi_amount` double NOT NULL,
+  `obligation_met_on_date` date DEFAULT NULL,
+  `created_at` date DEFAULT NULL,
   PRIMARY KEY (`id`)
 )

@@ -100,8 +100,8 @@ Forecast: {period['detailedForecast']}
 connection = pymysql.connect(
     host='localhost',
     user='root',
-    password='Abhay@#1001',
-    database='test_db'
+    password='',
+    database=''
 )
 
 # Function to fetch all table names
@@ -170,4 +170,5 @@ async def get_application_intro()->str:
 
 if __name__ == "__main__":
     # Initialize and run the server
+    print("Starting weather server...")
     mcp.run(transport='stdio')
