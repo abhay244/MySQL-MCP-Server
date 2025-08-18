@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment variables - IMPORTANT: Keep credentials secure!
+.env
+.env.local
+.env.production
+.env.development
+
+# AWS credentials
+.aws/
+aws-credentials.json
