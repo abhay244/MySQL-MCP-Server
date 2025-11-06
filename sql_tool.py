@@ -3,24 +3,67 @@ import httpx
 import pymysql
 import json
 import re
+import os
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
+# Load environment variables
+load_dotenv()
+
 # Initialize FastMCP server
-mcp = FastMCP("weather")
+mcp = FastMCP("lms-sql-tool")
 
 
-# Create a MySQL connection
-connection = pymysql.connect(
-    host='localhost',
-    user='root',
-    password='Abhay@#1001',
-    database='testdb',
-    cursorclass=pymysql.cursors.DictCursor  # Use dict cursor for better data handling
-)
+# Create a MySQL connection using environment variables
+connection = None
+try:
+    print("Connecting to database... with host:", os.getenv('DB_HOST'))
+    connection = pymysql.connect(
+        host=os.getenv('DB_HOST'),
+        port=int(os.getenv('DB_PORT', 3306)),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_NAME'),
+        cursorclass=pymysql.cursors.DictCursor  # Use dict cursor for better data handling
+    )
+    print("Database connection established successfully")
+except Exception as e:
+    print(f" Failed to connect to database: {e}")
+    connection = None
+
+# Load business context from Introduction.txt
+BUSINESS_CONTEXT_FILE = os.path.join(os.path.dirname(__file__), "Introduction.txt")
+BUSINESS_CONTEXT = ""
+
+try:
+    with open(BUSINESS_CONTEXT_FILE, "r") as f:
+        BUSINESS_CONTEXT = f.read().strip()
+    print("✅ Business context loaded successfully")
+except FileNotFoundError:
+    print("⚠️  Introduction.txt not found - business context not available")
+    BUSINESS_CONTEXT = "Business context file not found"
+except Exception as e:
+    print(f"⚠️  Failed to load business context: {e}")
+    BUSINESS_CONTEXT = "Failed to load business context"
+
+
+def check_connection():
+    """Check if database connection is available"""
+    if connection is None:
+        return False, "Database connection not established. Please check your environment variables."
+    try:
+        connection.ping(reconnect=True)
+        return True, "Connection is active"
+    except Exception as e:
+        return False, f"Database connection error: {str(e)}"
 
 
 # Function to fetch all table names
 async def fetch_all_tables()->str:
+        is_connected, message = check_connection()
+        if not is_connected:
+            return json.dumps({"error": message})
+        
         cursor = connection.cursor()
         cursor.execute("SHOW TABLES")
         tables = cursor.fetchall()
@@ -31,6 +74,10 @@ async def fetch_all_tables()->str:
 
 # Function to get table schema
 async def fetch_table_schema(table_name: str) -> Dict:
+    is_connected, message = check_connection()
+    if not is_connected:
+        return {"error": message}
+    
     cursor = connection.cursor()
     try:
         cursor.execute(f"DESCRIBE {table_name}")
@@ -58,6 +105,10 @@ async def fetch_table_schema(table_name: str) -> Dict:
 
 # Function to execute safe queries
 async def execute_safe_query(query: str, params: tuple = None) -> Dict:
+    is_connected, message = check_connection()
+    if not is_connected:
+        return {"error": message, "success": False}
+    
     cursor = connection.cursor()
     try:
         # Check if query is safe (only SELECT statements)
@@ -94,10 +145,9 @@ async def execute_safe_query(query: str, params: tuple = None) -> Dict:
         cursor.close()
 
 # Function to generate SQL query based on user context
-def generate_sql_query(user_request: str, table_schemas: Dict) -> str:
+def genera1te_sql_query(user_request: str, table_schemas: Dict) -> str:
     """
     Generate SQL query based on user request and available table schemas
-    This is a basic implementation - can be enhanced with AI/LLM integration
     """
     user_request_lower = user_request.lower()
     
@@ -148,6 +198,28 @@ def generate_sql_query(user_request: str, table_schemas: Dict) -> str:
     
     return "-- Unable to generate query automatically. Please provide more specific requirements."
 
+def interpret_loan_data(data: List[Dict], query: str) -> str:
+    """Interpret query results in the context of lending business rules"""
+    interpretations = []
+    
+    # Check if query involves loan status
+    if any('loan_status' in str(row).lower() for row in data) or 'loan_status' in query.lower():
+        interpretations.append("Loan Status Guide: 300=Active, 600=Closed, 131=Closed")
+    
+    # Check if query involves transactions
+    if any('trans_type' in str(row).lower() for row in data) or 'trans_type' in query.lower():
+        interpretations.append("Transaction Types: 1=Disbursement, 2=Repayment")
+    
+    # Check if query involves EMI schedule
+    if 'repayment_schedule' in query.lower() or any('obligation_met_on_date' in str(row).lower() for row in data):
+        interpretations.append("EMI Status: NULL obligation_met_on_date = Pending, NOT NULL = Paid")
+    
+    # Check if query involves charges
+    if 'charge' in query.lower():
+        interpretations.append("Charge Types: charge_id 7=LPC, 12=NBC, 19=NRC, others=Processing fees")
+    
+    return "; ".join(interpretations) if interpretations else "Standard query result - refer to business context for interpretation"
+
 def build_advanced_query(table_name: str, columns: List[str] = None, where_conditions: Dict = None, 
                         order_by: str = None, limit: int = None, group_by: str = None) -> str:
     """
@@ -195,6 +267,26 @@ def build_advanced_query(table_name: str, columns: List[str] = None, where_condi
     
     return query
 
+@mcp.resource("lms://business-context")
+async def get_business_context() -> str:
+    """Get the complete business context for the lending management system.
+    This includes loan states, payment processes, EMI management, and charge types."""
+    return BUSINESS_CONTEXT
+
+@mcp.tool()
+async def get_lending_context() -> str:
+    """Get comprehensive business context about the loan management system"""
+    return f"""LENDING MANAGEMENT SYSTEM CONTEXT:
+
+{BUSINESS_CONTEXT}
+
+This context should be considered when:
+- Interpreting loan data and statuses
+- Understanding payment flows and EMI management
+- Analyzing charges and fees
+- Working with advance payments and part payments
+- Understanding loan closure processes"""
+
 @mcp.tool()
 async def get_table_list() -> str:
         """Get the list of all tables present in database
@@ -234,7 +326,7 @@ async def get_all_table_schemas() -> str:
 
 @mcp.tool()
 async def create_sql_query(user_request: str, include_schemas: bool = True) -> str:
-    """Generate SQL query based on user request and table schemas
+    """Generate SQL query based on user request and table schemas, considering lending business context
     
     Args:
         user_request: Description of what data the user wants to query
@@ -256,16 +348,42 @@ async def create_sql_query(user_request: str, include_schemas: bool = True) -> s
         result = {
             "user_request": user_request,
             "generated_query": generated_query,
-            "note": "Review the query before executing. Modify as needed for your specific requirements."
+            "note": "Review the query before executing. Modify as needed for your specific requirements.",
+            "business_context": "Consider the lending business rules when interpreting results"
         }
         
         if include_schemas:
             result["available_tables"] = table_schemas
+            result["lending_context"] = {
+                "loan_statuses": "300=Active, 600=Closed, 131=Closed",
+                "transaction_types": "1=Disbursement, 2=Repayment",
+                "key_tables": "m_loan, m_loan_transaction, m_loan_repayment_schedule, m_loan_charge"
+            }
         
         return json.dumps(result, indent=2)
         
     except Exception as e:
         return json.dumps({"error": f"Failed to create SQL query: {str(e)}"})
+
+@mcp.tool()
+async def execute_query_with_context(sql_query: str) -> str:
+    """Execute a SQL query safely with lending business context interpretation
+    
+    Args:
+        sql_query: The SQL query to execute
+    """
+    try:
+        result = await execute_safe_query(sql_query)
+        
+        if result["success"]:
+            # Add business context interpretation
+            interpretation = interpret_loan_data(result["data"], sql_query)
+            result["business_interpretation"] = interpretation
+            result["lending_context"] = BUSINESS_CONTEXT[:500] + "..." if len(BUSINESS_CONTEXT) > 500 else BUSINESS_CONTEXT
+        
+        return json.dumps(result, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to execute query: {str(e)}", "success": False})
 
 @mcp.tool()
 async def execute_query(sql_query: str) -> str:
@@ -435,10 +553,99 @@ async def suggest_query_improvements(sql_query: str) -> str:
     except Exception as e:
         return json.dumps({"error": f"Failed to analyze query: {str(e)}"})
 
+@mcp.tool()
+async def get_common_lending_queries() -> str:
+    """Get a list of common SQL queries useful for lending management system analysis"""
+    common_queries = {
+        "active_loans": {
+            "query": "SELECT * FROM m_loan WHERE loan_status = 300",
+            "description": "Get all active loans"
+        },
+        "closed_loans": {
+            "query": "SELECT * FROM m_loan WHERE loan_status IN (600, 131)",
+            "description": "Get all closed loans"
+        },
+        "pending_emis": {
+            "query": "SELECT * FROM m_loan_repayment_schedule WHERE obligation_met_on_date IS NULL AND due_date < CURDATE()",
+            "description": "Get overdue EMIs"
+        },
+        "loan_transactions": {
+            "query": "SELECT l.id as loan_id, lt.trans_type, lt.amount, lt.created_at FROM m_loan l JOIN m_loan_transaction lt ON l.id = lt.loan_id WHERE l.id = [LOAN_ID]",
+            "description": "Get all transactions for a specific loan (replace [LOAN_ID])"
+        },
+        "total_disbursements": {
+            "query": "SELECT SUM(amount) as total_disbursed FROM m_loan_transaction WHERE trans_type = 1",
+            "description": "Get total amount disbursed"
+        },
+        "total_repayments": {
+            "query": "SELECT SUM(amount) as total_repaid FROM m_loan_transaction WHERE trans_type = 2",
+            "description": "Get total amount repaid"
+        },
+        "charges_summary": {
+            "query": "SELECT charge_id, COUNT(*) as count, SUM(amount) as total FROM m_loan_charge GROUP BY charge_id",
+            "description": "Summary of all charges (7=LPC, 12=NBC, 19=NRC)"
+        },
+        "loan_with_user_details": {
+            "query": "SELECT u.name, u.mobile, l.loan_amount, l.loan_status, l.created_at FROM new_users u JOIN m_loan l ON u.id = l.user_id",
+            "description": "Get loans with user information"
+        }
+    }
+    
+    result = {
+        "common_queries": common_queries,
+        "business_context_reminder": "Remember: 300=Active, 600/131=Closed loans; 1=Disbursement, 2=Repayment transactions",
+        "note": "Replace [LOAN_ID] and other placeholders with actual values before executing"
+    }
+    
+    return json.dumps(result, indent=2)
+
+@mcp.tool()
+async def analyze_loan_portfolio() -> str:
+    """Analyze the overall loan portfolio with business context"""
+    try:
+        # Get portfolio summary
+        portfolio_query = """
+        SELECT 
+            loan_status,
+            COUNT(*) as loan_count,
+            SUM(loan_amount) as total_amount,
+            AVG(loan_amount) as avg_amount,
+            SUM(total_outstanding) as total_outstanding
+        FROM m_loan 
+        GROUP BY loan_status
+        """
+        
+        result = await execute_safe_query(portfolio_query)
+        
+        if result["success"]:
+            # Add business interpretation
+            portfolio_data = result["data"]
+            interpretation = []
+            
+            for row in portfolio_data:
+                status = row["loan_status"]
+                count = row["loan_count"]
+                amount = row["total_amount"]
+                
+                if status == 300:
+                    interpretation.append(f"Active Loans: {count} loans worth {amount:,.2f}")
+                elif status in [600, 131]:
+                    interpretation.append(f"Closed Loans (Status {status}): {count} loans worth {amount:,.2f}")
+                else:
+                    interpretation.append(f"Other Status ({status}): {count} loans worth {amount:,.2f}")
+            
+            result["portfolio_summary"] = interpretation
+            result["business_context"] = "Portfolio analysis based on loan_status: 300=Active, 600/131=Closed"
+        
+        return json.dumps(result, indent=2, default=str)
+        
+    except Exception as e:
+        return json.dumps({"error": f"Failed to analyze portfolio: {str(e)}", "success": False})
+
 
 if __name__ == "__main__":
     # Initialize and run the server
-    print("Starting sql_mcp server...")
+    print("Starting LMS SQL Tool server with business context...")
     mcp.run(transport='stdio')
 
 

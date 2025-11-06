@@ -1,12 +1,12 @@
-from mcp.server.fastmcp import FastMcp
+from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
 
 
-mcp=FastMcp("docs")
+mcp=FastMCP("docs")
 
 def main():
-    print("Hello from weather!")
+    print("Hello from LMS!")
 
 
 if __name__ == "__main__":

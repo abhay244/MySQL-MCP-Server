@@ -1,0 +1,17 @@
+we are a lending company which lends money to users,
+ after creation of loan we manage the state of loan,
+ we calculate interest every day for each loan,
+ each loan is divided into multiple emis depending on the product on which the loan is disbursed, product contains information about interest rate and number of emis
+loan is disbursed, each emi is stored in m_loan_repayment_schedule
+and also when customer makes any payment it is stored in m_loan_transaction table, m_loan_transaction table consists the apportionment of amount paid by customer respectively amount is also reduced from m_loan and if any emi closed then m_loan_repayment_schedule is also updated.
+If payment of amount less than amount of emi is made before due date then it is stored in advance_payment_queue and it is posted in m_loan_transaction on due date and marked as inactive in advance_payment_queue.
+If payment of amount equal total_outstanding_derived or greater than total_outstanding_derived is made then loan is closed all emis are paid and extra amount is stored in overpayment_portion_derived refunded afterwords.
+If payment of amount greater than emi amount is made before due date then part_payment of amount, part_pay_amount=paid_amount-emi_amount is done amount equals to 1 emi amount is stored in advance payment queue and this part_pay_amount start closing emis from end if part_pay_amount<emi_amount then it will reduce emi_amount for last emi and 
+if 1*emi_amount<part_pay_amount<2*emi_amount then it will close last emi and reduce emi_amount for 2nd last emi and so on.
+Also we apply some late payment charge if customer do not pay emi on time,
+ some nach bounce charge if nach presented is bounced for customer and also some charge in nach registeration failure cases are added these three charges are called otherFee,
+ we also provide waiver in loan in some usecases,
+ also some processing fee is charged when loan is being disbursed.
+There ia a table m_loan_charge which contains all the charges applied on a loan i.e charge_id=7 for LPC, charge_id=12 for NBC, charge_id=19 for NRC and other charge_id
+is for processing fees.
+Primary key for m_loan is fk for m_loan_transaction and m_loan_repayment_schedule
